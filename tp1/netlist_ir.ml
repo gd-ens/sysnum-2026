@@ -52,12 +52,25 @@ type ir_prog = {
   base: Netlist_ast.program;
 }
 
+type verified_ir_program = private VIRProg of ir_prog (* to verify its integrity later for inbounds checks *)
+
+type ir_state = {
+  vars: bitarray;
+  ram: bitarray parray array;
+  prog: ir_prog;
+}
+
 let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) : ir_prog =
   let open Netlist_ast in
   let get_id = function
   | Avar v -> v
   | Aconst _ -> failwith "Expected ident, got constant" in
   let allocate p =
+    let input_var_size, input_var_alloc = List.fold_left (fun (curr, env) x -> (* manage inputs *)
+      let s = match Env.find x p.p_vars with
+      | TBit -> 1 | TBitArray n -> n in
+      curr + s, Env.add x curr env
+      ) (0, Env.empty) p.p_inputs in
     let alloc1 (curr_idx, var_alloc, bus_alloc, ram_alloc, rom_alloc, asizes, wsizes) (x, eq) =
       let (.%()) = Iarray.get in
       let xtyp = Env.find x p.p_vars in
@@ -74,20 +87,20 @@ let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) 
       | TBitArray n -> (let new_curr, bus, ra, ro, asi, wsi = match eq with
         | Econcat(a, b) ->
           let y = get_id a and z = get_id b in
-          curr_idx, Iarray.append (Env.find y bus_alloc) (Env.find x bus_alloc), ram_alloc, rom_alloc, asizes, wsizes
+          curr_idx, Iarray.append (Env.find y bus_alloc) (Env.find z bus_alloc), ram_alloc, rom_alloc, asizes, wsizes
         | Eslice (i1, i2, a) ->
           let y = get_id a in
           let busy = Env.find y bus_alloc in
           curr_idx, Iarray.init (i2 - i1 + 1) (fun i -> busy.%(i1+1)), ram_alloc, rom_alloc, asizes, wsizes
         | Ereg _ -> curr_idx + n, Iarray.init n (fun i-> curr_idx + i), ram_alloc, rom_alloc, asizes, wsizes (* not sure if needed, but done anyway *)
         | Eram (asize, wsize, _, _, _, _) -> (* need new allocation *)
-          curr_idx + n, Iarray.init n (fun i-> curr_idx + i), Env.add x (snd (Env.max_binding ram_alloc) + 1) ram_alloc, rom_alloc, Env.add x asize asizes, Env.add x wsize wsizes
+          curr_idx + n, Iarray.init n (fun i-> curr_idx + i), Env.add x (Env.cardinal ram_alloc) ram_alloc, rom_alloc, Env.add x asize asizes, Env.add x wsize wsizes
         | Erom (asize, wsize, _) -> (* need new allocation *)
-          curr_idx + n, Iarray.init n (fun i-> curr_idx + i), ram_alloc, Env.add x (snd (Env.max_binding rom_alloc) + 1) rom_alloc, Env.add x asize asizes, Env.add x wsize wsizes
+          curr_idx + n, Iarray.init n (fun i-> curr_idx + i), ram_alloc, Env.add x (Env.cardinal rom_alloc) rom_alloc, Env.add x asize asizes, Env.add x wsize wsizes
         | _ -> failwith "Expected a bus but the operation is a scalar one" in
         (new_curr, Env.add x bus.%(0) var_alloc (* for dst *), Env.add x bus bus_alloc, ra, ro, asi, wsi)
       ) in
-      List.fold_left alloc1 (0, Env.empty, Env.empty, Env.empty, Env.empty, Env.empty, Env.empty) p.p_eqs
+      List.fold_left alloc1 (input_var_size, input_var_alloc, Env.map (fun i -> Iarray.of_array [|i|]) input_var_alloc, Env.empty, Env.empty, Env.empty, Env.empty) p.p_eqs
   in
   let var_size, var_alloc, bus_alloc, ram_alloc, rom_alloc, asizes, wsizes = allocate p in
   let roms = Array.make (Env.cardinal rom_alloc) Bitarray.epsilon in
@@ -98,7 +111,8 @@ let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) 
   rom_alloc;
   let roms = Iarray.of_array roms in
 
-  let find_idx x = Env.find (get_id x) var_alloc
+  let find_idx x = (*Env.iter (fun x idx -> Printf.eprintf "%s -> %i\n" x idx) var_alloc; Printf.eprintf "Searching for %s\n" (match x with Avar x -> x | _ -> "");*)
+    Env.find (get_id x) var_alloc
   and find_bus x = Env.find (get_id x) bus_alloc in
   let rec compile_instruction x =
     let dst = find_idx x in function
@@ -195,3 +209,44 @@ let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) 
     instructions;
     base = p;
   }
+
+  
+let print_ir_program ?(oc = Out_channel.stderr) p =
+  let string_of_bus bus = String.concat "; " (Iarray.to_list (Iarray.map string_of_int bus)) in
+  let string_of_instr = function
+| IRReset idx -> Printf.sprintf "v(%d) <- 0" idx
+| IRSet idx -> Printf.sprintf "v(%d) <- 0" idx
+| IRId (idx1, idx2) -> Printf.sprintf "v(%d) <- v(%d)" idx1 idx2
+| IRNot (idx1, idx2) -> Printf.sprintf "v(%d) <- ~v(%d)" idx1 idx2
+| IRReg (idx1, idx2) -> Printf.sprintf "v(%d) <- r(%d)" idx1 idx2
+| IRRegV (idx1, bus2) -> Printf.sprintf "v(%d..) <- r(%s)" idx1 (string_of_bus bus2)
+| IRAnd (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) & v(%d)" idx1 idx2 idx3
+| IROr (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) | v(%d)" idx1 idx2 idx3
+| IRNand (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- ~(v(%d) & v(%d))" idx1 idx2 idx3
+| IRXor (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) ^ v(%d)" idx1 idx2 idx3
+| IRAndNot (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) & ~v(%d)" idx1 idx2 idx3
+| IROrNot (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) | ~v(%d)" idx1 idx2 idx3
+| IRMux (idx1, idx2, idx3, idx4) -> Printf.sprintf "v(%d) <- Mux(v(%d), v(%d), v(%d))" idx1 idx2 idx3 idx4
+| IRRom (idx, rid, asize, wsize, bus) -> Printf.sprintf "v(%d..) <- ROM(%d, asize = %d, wsize = %d)(%s)" idx rid asize wsize (string_of_bus bus)
+| IRRam (idx, rid, asize, wsize, raddr, we, waddr, wd) -> Printf.sprintf "v(%d..) <- RAM(%d, asize = %d, wsize = %d)(raddr = %s, we = v(%d), waddr = %s, wd = %s)" idx rid asize wsize (string_of_bus raddr) we (string_of_bus waddr) (string_of_bus wd)
+  in
+  let open Netlist_ast in
+  Printf.fprintf oc "----Program IR----";
+  Printf.fprintf oc "Total size: %d\n" p.var_size;
+  Printf.fprintf oc "----Variables----\n";
+  Env.iter (fun name idx -> Printf.fprintf oc "- %s: %d\n" name idx) p.var_alloc;
+  Printf.fprintf oc "----Buses----\n";
+  Env.iter (fun name bus -> Printf.fprintf oc "- %s: [%s]\n" name (string_of_bus bus)) p.bus_alloc;
+  Printf.fprintf oc "----Ram allocations----\n";
+  Env.iter (fun name idx -> Printf.fprintf oc "- %s: %d\n" name idx) p.ram_alloc;
+  Printf.fprintf oc "----Rom allocations----\n";
+  Env.iter (fun name idx -> Printf.fprintf oc "- %s: %d\n" name idx) p.rom_alloc;
+  Printf.fprintf oc "----Address sizes----\n";
+  Env.iter (fun name idx -> Printf.fprintf oc "- %s: %d\n" name idx) p.asizes;
+  Printf.fprintf oc "----Word sizes----\n";
+  Env.iter (fun name idx -> Printf.fprintf oc "- %s: %d\n" name idx) p.wsizes;
+  Printf.fprintf oc "----Rom sizes----\n";
+  Iarray.iteri (fun rid rom -> Printf.fprintf oc "- %d: %d\n" rid (Bitarray.length rom)) p.roms;
+  Printf.fprintf oc "----Instructions----\n";
+  Iarray.iteri (fun i instr -> Printf.fprintf oc "- %d: %s\n" i (string_of_instr instr)) p.instructions;
+  Printf.fprintf oc "--------"

@@ -1,7 +1,8 @@
 let print_only = ref false
 let number_steps = ref (-1)
+let verbose = ref false
 
-let seq_simulator program inputs ?(mem_init = (fun _ size -> Array.make size false)) =
+(*let seq_simulator program inputs ?(mem_init = (fun _ size -> Array.make size false)) =
   let open Netlist_ast in
   let mangle_memory_name wsize asize name = Printf.sprintf "$mem_%s(addr_size=%d, width=%d)" name asize wsize in
   let step penv =
@@ -92,9 +93,13 @@ let seq_simulator program inputs ?(mem_init = (fun _ size -> Array.make size fal
   in
   Seq.scan (fun env input ->
     let env = List.fold_left (fun env (iname, ival) -> Env.update iname (fun _ -> Some ival) env) env (Env.to_list input) (* TODO: probably easier to write *) in
-    step env) init_env inputs
+    step env) init_env inputs*)
 
-let simulator program number_steps = failwith "netlist_simulator.simulator: Non implementé"
+let simulator program number_steps =
+  let ir = Netlist_ir.compile ~rom_init:(fun _ -> Bitarray.epsilon) program in
+  if !verbose then Netlist_ir.print_ir_program ir;
+  flush stderr;
+  failwith "netlist_simulator.simulator: Non implementé"
 
 let compile filename =
   try
@@ -111,7 +116,8 @@ let compile filename =
 
 let main () =
   Arg.parse
-    ["-n", Arg.Set_int number_steps, "Number of steps to simulate"]
+    ["-n", Arg.Set_int number_steps, "Number of steps to simulate";
+    "-v", Arg.Set verbose, "Verbose"]
     compile
     ""
 ;;
