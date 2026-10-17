@@ -60,6 +60,10 @@ type ir_state = {
   prog: ir_prog;
 }
 
+let type_size = function
+| Netlist_ast.TBit -> 1
+| Netlist_ast.TBitArray n -> n
+
 let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) : ir_prog =
   let open Netlist_ast in
   let get_id = function
@@ -67,8 +71,7 @@ let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) 
   | Aconst _ -> failwith "Expected ident, got constant" in
   let allocate p =
     let input_var_size, input_var_alloc = List.fold_left (fun (curr, env) x -> (* manage inputs *)
-      let s = match Env.find x p.p_vars with
-      | TBit -> 1 | TBitArray n -> n in
+      let s = type_size (Env.find x p.p_vars) in
       curr + s, Env.add x curr env
       ) (0, Env.empty) p.p_inputs in
     let alloc1 (curr_idx, var_alloc, bus_alloc, ram_alloc, rom_alloc, asizes, wsizes) (x, eq) =
@@ -94,13 +97,13 @@ let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) 
           curr_idx, Iarray.init (i2 - i1 + 1) (fun i -> busy.%(i1+1)), ram_alloc, rom_alloc, asizes, wsizes
         | Ereg _ -> curr_idx + n, Iarray.init n (fun i-> curr_idx + i), ram_alloc, rom_alloc, asizes, wsizes (* not sure if needed, but done anyway *)
         | Eram (asize, wsize, _, _, _, _) -> (* need new allocation *)
-          curr_idx + n, Iarray.init n (fun i-> curr_idx + i), Env.add x (Env.cardinal ram_alloc) ram_alloc, rom_alloc, Env.add x asize asizes, Env.add x wsize wsizes
+          curr_idx + n, Iarray.init n (fun i -> curr_idx + i), Env.add x (Env.cardinal ram_alloc) ram_alloc, rom_alloc, Env.add x asize asizes, Env.add x wsize wsizes
         | Erom (asize, wsize, _) -> (* need new allocation *)
-          curr_idx + n, Iarray.init n (fun i-> curr_idx + i), ram_alloc, Env.add x (Env.cardinal rom_alloc) rom_alloc, Env.add x asize asizes, Env.add x wsize wsizes
+          curr_idx + n, Iarray.init n (fun i -> curr_idx + i), ram_alloc, Env.add x (Env.cardinal rom_alloc) rom_alloc, Env.add x asize asizes, Env.add x wsize wsizes
         | _ -> failwith "Expected a bus but the operation is a scalar one" in
         (new_curr, Env.add x bus.%(0) var_alloc (* for dst *), Env.add x bus bus_alloc, ra, ro, asi, wsi)
       ) in
-      List.fold_left alloc1 (input_var_size, input_var_alloc, Env.map (fun i -> Iarray.of_array [|i|]) input_var_alloc, Env.empty, Env.empty, Env.empty, Env.empty) p.p_eqs
+      List.fold_left alloc1 (input_var_size, input_var_alloc, Env.mapi (fun x i -> Iarray.of_array (Array.init (type_size (Env.find x p.p_vars)) (fun j -> i+j))) input_var_alloc, Env.empty, Env.empty, Env.empty, Env.empty) p.p_eqs
   in
   let var_size, var_alloc, bus_alloc, ram_alloc, rom_alloc, asizes, wsizes = allocate p in
   let roms = Array.make (Env.cardinal rom_alloc) Bitarray.epsilon in
