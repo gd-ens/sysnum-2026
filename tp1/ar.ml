@@ -1,12 +1,17 @@
 let read_archive (ic: In_channel.t) =
-  let ic = Scanf.Scanning.from_channel ic in
-  Scanf.kscanf ic (fun _ _ -> failwith "No magic number") "!<arch>\n" ();
+  let mn = "!<arch>\n" in
+  if In_channel.really_input_string ic (String.length mn) <> Some mn then
+    failwith "No magic number";
   let rec aux () =
-    Scanf.kscanf ic (fun _ e -> raise e) "%16s%12s%6s%6s%8s%10s `\n" (fun name _ _ _ _ length ->
-        let length = int_of_string (String.trim length) in
-        let content = Bytes.init length (fun _ -> Scanf.bscanf ic "%c" Fun.id) in
-        if length mod 2 = 1 then
-          Scanf.kscanf ic (fun _ _ -> failwith "Incorrect terminator") "\n" ();
-        (name, content)::aux ()
-      ) in
+    try
+      let name = Option.get (In_channel.really_input_string ic 16) in
+      let _ = In_channel.really_input_string ic 32 in
+      let length = int_of_string @@ String.trim @@ Option.get (In_channel.really_input_string ic 10) in
+      let em = In_channel.really_input_string ic 2 in
+      assert(em = Some "`\n");
+      let content = Option.get (In_channel.really_input_string ic length) in
+      if length mod 2 = 1 then ignore (In_channel.input_byte ic);
+      (name, content)::aux ()
+    with
+    | End_of_file | Invalid_argument _ -> [] in
   aux ()
