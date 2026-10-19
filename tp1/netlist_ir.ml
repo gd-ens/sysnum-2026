@@ -101,7 +101,7 @@ let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) 
   let roms = Array.make (Env.cardinal rom_alloc) Bitarray.epsilon in
   Env.iter (fun x rid ->
     roms.(rid) <- rom_init x;
-    if Bitarray.length roms.(rid) < 1 lsl (Env.find x asizes * Env.find x wsizes)
+    if Bitarray.length roms.(rid) < (1 lsl Env.find x asizes) * Env.find x wsizes
       then failwith "ROM not big enough")
   rom_alloc;
   let roms = Iarray.of_array roms in
@@ -129,7 +129,7 @@ let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) 
   | Eram (asize, wsize, raddr, we, waddr, wd) ->
     [IRRam (dst, Env.find (get_id x) ram_alloc, asize, wsize, find_bus raddr, find_idx we, find_bus waddr, find_bus wd)]
   | Erom (asize, wsize, raddr) ->
-    [IRRom (dst, Env.find (get_id x) ram_alloc, asize, wsize, find_bus raddr)]
+    [IRRom (dst, Env.find (get_id x) rom_alloc, asize, wsize, find_bus raddr)]
   and compile_binop x op a b = match (op, a, b) with
   | (op, Aconst (VBit a), Aconst (VBit b)) ->
     let r = match op with
@@ -226,7 +226,7 @@ let print_ir_program ?(oc = Out_channel.stderr) p =
   | IRRam (idx, rid, asize, wsize, raddr, we, waddr, wd) -> Printf.sprintf "v(%d..) <- RAM(%d, asize = %d, wsize = %d)(raddr = %s, we = v(%d), waddr = %s, wd = %s)" idx rid asize wsize (string_of_bus raddr) we (string_of_bus waddr) (string_of_bus wd)
   in
   let open Netlist_ast in
-  Printf.fprintf oc "----Program IR----";
+  Printf.fprintf oc "----Program IR----\n";
   Printf.fprintf oc "Total size: %d\n" p.var_size;
   Printf.fprintf oc "----Variables----\n";
   Env.iter (fun name idx -> Printf.fprintf oc "- %s: %d\n" name idx) p.var_alloc;
@@ -240,8 +240,8 @@ let print_ir_program ?(oc = Out_channel.stderr) p =
   Env.iter (fun name idx -> Printf.fprintf oc "- %s: %d\n" name idx) p.asizes;
   Printf.fprintf oc "----Word sizes----\n";
   Env.iter (fun name idx -> Printf.fprintf oc "- %s: %d\n" name idx) p.wsizes;
-  Printf.fprintf oc "----Rom sizes----\n";
-  Iarray.iteri (fun rid rom -> Printf.fprintf oc "- %d: %d\n" rid (Bitarray.length rom)) p.roms;
+  Printf.fprintf oc "----Roms----\n";
+  Iarray.iteri (fun rid rom -> Printf.fprintf oc "- %d (size %d): %s \n" rid (Bitarray.length rom) (Bitarray.to_string rom)) p.roms;
   Printf.fprintf oc "----Instructions----\n";
   Iarray.iteri (fun i instr -> Printf.fprintf oc "- %d: %s\n" i (string_of_instr instr)) p.instructions;
   Printf.fprintf oc "--------\n"

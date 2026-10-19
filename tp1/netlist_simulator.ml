@@ -21,7 +21,7 @@ let simulate_ir_step (VIRProg p) (renv: ir_state) (cenv: ir_state): unit =
   | IRAndNot (idx1, idx2, idx3) -> set cenv.vars idx1 (bandnot (get cenv.vars idx2) (get cenv.vars idx3))
   | IROrNot (idx1, idx2, idx3) -> set cenv.vars idx1 (bornot (get cenv.vars idx2) (get cenv.vars idx3))
   | IRMux (idx1, idx2, idx3, idx4) -> set cenv.vars idx1 (bmux (get cenv.vars idx2) (get cenv.vars idx3) (get cenv.vars idx4))
-  | IRRom (idx, rid, asize, wsize, raddr) -> blit (Iarray.get p.roms rid) (0 * wsize) cenv.vars idx wsize
+  | IRRom (idx, rid, asize, wsize, raddr) -> blit (Iarray.get p.roms rid) (0 (* TODO: fix *) * wsize) cenv.vars idx wsize
   | IRRam (idx, rid, asize, wsize, raddr, we, waddr, wd) ->
     let get_bus bus = Iarray.map (Fun.compose bool_of_bit (get cenv.vars)) bus in
     let raddr = get_bus raddr (* get the bits associated with the bus *) in
@@ -112,18 +112,30 @@ let print_outputs ?(lsb_first = false) p s =
 
 let simulator program number_steps =
   let load_rom =
-    let build_rom _ = failwith "" in
+    let build_rom s =
+      s 
+      |> String.to_seq
+      |> Seq.map (fun c -> let i = int_of_char c in Array.map (fun shift -> i lsr shift mod 2 = 1) [|0;1;2;3;4;5;6;7|])
+      |> List.of_seq
+      |> Array.concat
+      |> Bitarray.from_bool_array in
     if !rom_file = "" then
       fun _ -> failwith "No ROM file specified"
     else
       let ic = open_in !rom_file in
       let romll = Ar.read_archive ic in
       close_in ic;
-      fun name -> build_rom (List.assoc (name^"/") romll) in
+      fun name ->
+        let s = List.assoc (name^"/") romll in
+        if !verbose then (
+          Printf.eprintf "Building ROM from string \"%s\"\n" (String.escaped s);
+          flush stderr
+        );
+        build_rom s in
   let ir = Netlist_ir.compile ~rom_init:load_rom program in
   if !verbose then Netlist_ir.print_ir_program ir;
   let vir = Netlist_ir.check_ir_safety ir in
-  if !verbose then Printf.eprintf "Safty checks passed\n";
+  if !verbose then Printf.eprintf "Safety checks passed\n";
   flush stderr;
   let inputs = Seq.of_dispenser (fun _ -> try Some (get_inputs ~lsb_first:!lsb_first vir) with End_of_file -> print_newline (); None) in
   let states =
@@ -159,7 +171,7 @@ let main () =
     "-v", Arg.Set verbose, "Verbose";
     "-p", Arg.Set persistent, "Persistence required during evaluation";
     "--lsb", Arg.Set lsb_first, "Inputs and outputs lsb first";
-    "-r", Arg.Set_string rom_file, "AR file to load roms from"]
+    "--rom", Arg.Set_string rom_file, "AR file to load roms from"]
     compile
     ""
 ;;

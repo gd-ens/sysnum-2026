@@ -24,3 +24,5 @@ let bxor = bop (<>)
 let bornot = bop (fun x y -> x || not y)
 let bandnot = bop (fun x y -> x && not y)
 let bmux = top (fun c x y -> if c then y else x)
+let to_string (b: bitarray) =
+  String.of_bytes (Bytes.map (fun b -> if b = btrue then '1' else '0') b)

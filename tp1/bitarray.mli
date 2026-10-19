@@ -23,3 +23,4 @@ val bxor : bit -> bit -> bit
 val bornot : bit -> bit -> bit
 val bandnot : bit -> bit -> bit
 val bmux : bit -> bit -> bit -> bit
+val to_string : bitarray -> string
