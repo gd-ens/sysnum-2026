@@ -4,6 +4,7 @@ let number_steps = ref (-1)
 let verbose = ref false
 let persistent = ref false
 let lsb_first = ref false
+let rom_file = ref ""
 
 let simulate_ir_step (VIRProg p) (renv: ir_state) (cenv: ir_state): unit =
   let exec_instr = Bitarray.(function
@@ -110,7 +111,16 @@ let print_outputs ?(lsb_first = false) p s =
   )) (get_outputs p s)
 
 let simulator program number_steps =
-  let ir = Netlist_ir.compile ~rom_init:(fun _ -> failwith "Unimplemented ROM initialization" (* TODO: change *)) program in
+  let load_rom =
+    let build_rom _ = failwith "" in
+    if !rom_file = "" then
+      fun _ -> failwith "No ROM file specified"
+    else
+      let ic = open_in !rom_file in
+      let romll = Ar.read_archive ic in
+      close_in ic;
+      fun name -> build_rom (List.assoc (name^"/") romll) in
+  let ir = Netlist_ir.compile ~rom_init:load_rom program in
   if !verbose then Netlist_ir.print_ir_program ir;
   let vir = Netlist_ir.check_ir_safety ir in
   if !verbose then Printf.eprintf "Safty checks passed\n";
@@ -148,7 +158,8 @@ let main () =
     ["-n", Arg.Set_int number_steps, "Number of steps to simulate";
     "-v", Arg.Set verbose, "Verbose";
     "-p", Arg.Set persistent, "Persistence required during evaluation";
-    "--lsb", Arg.Set lsb_first, "Inputs and outputs lsb first"]
+    "--lsb", Arg.Set lsb_first, "Inputs and outputs lsb first";
+    "-r", Arg.Set_string rom_file, "AR file to load roms from"]
     compile
     ""
 ;;
