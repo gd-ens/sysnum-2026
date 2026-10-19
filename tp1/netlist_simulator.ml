@@ -5,8 +5,11 @@ let verbose = ref false
 let simulator program number_steps =
   let ir = Netlist_ir.compile ~rom_init:(fun _ -> Bitarray.epsilon) program in
   if !verbose then Netlist_ir.print_ir_program ir;
+  let vir = Netlist_ir.check_ir_safety ir in
+  if !verbose then Printf.eprintf "Safty checks passed\n";
   flush stderr;
-  failwith "netlist_simulator.simulator: Non implementé"
+  Printf.eprintf "Not implemented\n"; ignore vir;
+  ()
 
 let compile filename =
   try

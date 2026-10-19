@@ -250,7 +250,7 @@ let print_ir_program ?(oc = Out_channel.stderr) p =
   Iarray.iteri (fun rid rom -> Printf.fprintf oc "- %d: %d\n" rid (Bitarray.length rom)) p.roms;
   Printf.fprintf oc "----Instructions----\n";
   Iarray.iteri (fun i instr -> Printf.fprintf oc "- %d: %s\n" i (string_of_instr instr)) p.instructions;
-  Printf.fprintf oc "--------"
+  Printf.fprintf oc "--------\n"
 
 module IRVerfication: sig
   type verified_ir_prog = private VIRProg of ir_prog
