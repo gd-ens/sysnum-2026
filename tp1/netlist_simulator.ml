@@ -22,11 +22,11 @@ let simulate_ir_step (VIRProg p) (renv: ir_state) (cenv: ir_state): unit =
   | IRRam (idx, rid, asize, wsize, raddr, we, waddr, wd) ->
     let get_bus bus = Iarray.map (Fun.compose bool_of_bit (get cenv.vars)) bus in
     let raddr = get_bus raddr (* get the bits associated with the bus *) in
-    blit (Persistent_array.get cenv.ram.(rid) (Iarray.to_seq raddr)) 0 cenv.vars idx wsize;
+    blit (Persistent_array.get cenv.rams.(rid) (Iarray.to_seq raddr)) 0 cenv.vars idx wsize;
     if bool_of_bit (get cenv.vars we) then
       let waddr = get_bus waddr
       and wd = from_bool_array (Iarray.to_array (get_bus wd)) in
-      cenv.ram.(rid) <- Persistent_array.set cenv.ram.(rid) (Iarray.to_seq waddr) wd
+      cenv.rams.(rid) <- Persistent_array.set cenv.rams.(rid) (Iarray.to_seq waddr) wd
   ) in
   Iarray.iter exec_instr p.instructions
 

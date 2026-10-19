@@ -52,12 +52,6 @@ type ir_prog = {
   base: Netlist_ast.program;
 }
 
-type ir_state = {
-  vars: bitarray;
-  ram: bitarray parray array;
-  prog: ir_prog;
-}
-
 let type_size = function
 | Netlist_ast.TBit -> 1
 | Netlist_ast.TBitArray n -> n
@@ -306,3 +300,33 @@ let check_ir_safety p =
 end
 
 include IRVerfication
+
+type ir_state = {
+  vars: bitarray;
+  rams: bitarray parray array;
+  prog: ir_prog;
+}
+
+let create_state p =
+  let rams = Array.make (Netlist_ast.Env.cardinal p.ram_alloc) (Persistent_array.Val Bitarray.epsilon) in
+  Netlist_ast.Env.to_seq p.ram_alloc
+  |> Seq.iter (fun (x, rid) -> rams.(rid) <- Persistent_array.make (Netlist_ast.Env.find x p.asizes) (Bitarray.zeroes (Netlist_ast.Env.find x p.wsizes)));
+  {
+    vars = Bitarray.zeroes p.var_size;
+    rams;
+    prog = p;
+  }
+
+let copy_state s = {
+  vars = Bitarray.copy s.vars;
+  rams = Array.copy s.rams;
+  prog = s.prog;
+}
+
+let update_state s env =
+  let open Netlist_ast in
+  Env.iter (fun x v ->
+    let idx = Env.find x s.prog.var_alloc in
+    match v with
+    | VBit b -> Bitarray.set s.vars idx (Bitarray.bit_of_bool b)
+    | VBitArray ba -> Bitarray.blit (Bitarray.from_bool_array ba) 0 s.vars idx (Array.length ba)) env

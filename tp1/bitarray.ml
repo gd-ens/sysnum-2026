@@ -10,6 +10,8 @@ let set: (bitarray -> int -> bit -> unit) = Bytes.set
 let blit: (bitarray -> int -> bitarray -> int -> int -> unit) = Bytes.blit
 let epsilon: bitarray = Bytes.init 0 (fun _ -> '\000')
 let length: (bitarray -> int) = Bytes.length
+let zeroes n: bitarray = Bytes.make n bfalse
+let copy: (bitarray -> bitarray) = Bytes.copy
 
 let uop op a = bit_of_bool (op (bool_of_bit a))
 let bop op a b = bit_of_bool (op (bool_of_bit a) (bool_of_bit b))

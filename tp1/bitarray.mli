@@ -10,6 +10,8 @@ val set : bitarray -> int -> bit -> unit
 val blit : bitarray -> int -> bitarray -> int -> int -> unit
 val epsilon : bitarray
 val length : bitarray -> int
+val zeroes : int -> bitarray
+val copy : bitarray -> bitarray
 val uop : (bool -> bool) -> bit -> bit
 val bop : (bool -> bool -> bool) -> bit -> bit -> bit
 val top : (bool -> bool -> bool -> bool) -> bit -> bit -> bit -> bit
