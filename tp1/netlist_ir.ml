@@ -52,8 +52,6 @@ type ir_prog = {
   base: Netlist_ast.program;
 }
 
-type verified_ir_program = private VIRProg of ir_prog (* to verify its integrity later for inbounds checks *)
-
 type ir_state = {
   vars: bitarray;
   ram: bitarray parray array;
@@ -217,21 +215,21 @@ let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) 
 let print_ir_program ?(oc = Out_channel.stderr) p =
   let string_of_bus bus = String.concat "; " (Iarray.to_list (Iarray.map string_of_int bus)) in
   let string_of_instr = function
-| IRReset idx -> Printf.sprintf "v(%d) <- 0" idx
-| IRSet idx -> Printf.sprintf "v(%d) <- 0" idx
-| IRId (idx1, idx2) -> Printf.sprintf "v(%d) <- v(%d)" idx1 idx2
-| IRNot (idx1, idx2) -> Printf.sprintf "v(%d) <- ~v(%d)" idx1 idx2
-| IRReg (idx1, idx2) -> Printf.sprintf "v(%d) <- r(%d)" idx1 idx2
-| IRRegV (idx1, bus2) -> Printf.sprintf "v(%d..) <- r(%s)" idx1 (string_of_bus bus2)
-| IRAnd (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) & v(%d)" idx1 idx2 idx3
-| IROr (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) | v(%d)" idx1 idx2 idx3
-| IRNand (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- ~(v(%d) & v(%d))" idx1 idx2 idx3
-| IRXor (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) ^ v(%d)" idx1 idx2 idx3
-| IRAndNot (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) & ~v(%d)" idx1 idx2 idx3
-| IROrNot (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) | ~v(%d)" idx1 idx2 idx3
-| IRMux (idx1, idx2, idx3, idx4) -> Printf.sprintf "v(%d) <- Mux(v(%d), v(%d), v(%d))" idx1 idx2 idx3 idx4
-| IRRom (idx, rid, asize, wsize, bus) -> Printf.sprintf "v(%d..) <- ROM(%d, asize = %d, wsize = %d)(%s)" idx rid asize wsize (string_of_bus bus)
-| IRRam (idx, rid, asize, wsize, raddr, we, waddr, wd) -> Printf.sprintf "v(%d..) <- RAM(%d, asize = %d, wsize = %d)(raddr = %s, we = v(%d), waddr = %s, wd = %s)" idx rid asize wsize (string_of_bus raddr) we (string_of_bus waddr) (string_of_bus wd)
+  | IRReset idx -> Printf.sprintf "v(%d) <- 0" idx
+  | IRSet idx -> Printf.sprintf "v(%d) <- 0" idx
+  | IRId (idx1, idx2) -> Printf.sprintf "v(%d) <- v(%d)" idx1 idx2
+  | IRNot (idx1, idx2) -> Printf.sprintf "v(%d) <- ~v(%d)" idx1 idx2
+  | IRReg (idx1, idx2) -> Printf.sprintf "v(%d) <- r(%d)" idx1 idx2
+  | IRRegV (idx1, bus2) -> Printf.sprintf "v(%d..) <- r(%s)" idx1 (string_of_bus bus2)
+  | IRAnd (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) & v(%d)" idx1 idx2 idx3
+  | IROr (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) | v(%d)" idx1 idx2 idx3
+  | IRNand (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- ~(v(%d) & v(%d))" idx1 idx2 idx3
+  | IRXor (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) ^ v(%d)" idx1 idx2 idx3
+  | IRAndNot (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) & ~v(%d)" idx1 idx2 idx3
+  | IROrNot (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) | ~v(%d)" idx1 idx2 idx3
+  | IRMux (idx1, idx2, idx3, idx4) -> Printf.sprintf "v(%d) <- Mux(v(%d), v(%d), v(%d))" idx1 idx2 idx3 idx4
+  | IRRom (idx, rid, asize, wsize, bus) -> Printf.sprintf "v(%d..) <- ROM(%d, asize = %d, wsize = %d)(%s)" idx rid asize wsize (string_of_bus bus)
+  | IRRam (idx, rid, asize, wsize, raddr, we, waddr, wd) -> Printf.sprintf "v(%d..) <- RAM(%d, asize = %d, wsize = %d)(raddr = %s, we = v(%d), waddr = %s, wd = %s)" idx rid asize wsize (string_of_bus raddr) we (string_of_bus waddr) (string_of_bus wd)
   in
   let open Netlist_ast in
   Printf.fprintf oc "----Program IR----";
@@ -253,3 +251,58 @@ let print_ir_program ?(oc = Out_channel.stderr) p =
   Printf.fprintf oc "----Instructions----\n";
   Iarray.iteri (fun i instr -> Printf.fprintf oc "- %d: %s\n" i (string_of_instr instr)) p.instructions;
   Printf.fprintf oc "--------"
+
+module IRVerfication: sig
+  type verified_ir_prog = private VIRProg of ir_prog
+  exception IRUnsafe
+  val is_ir_program_safe: ir_prog -> bool
+  val check_ir_safety: ir_prog -> verified_ir_prog
+end = struct
+
+type verified_ir_prog = VIRProg of ir_prog (* to verify its integrity for inbounds checks *)
+exception IRUnsafe
+
+let is_ir_program_safe p =
+  let open Netlist_ast in
+  let iok i = i >= 0 && i < p.var_size in
+  let bok = Iarray.for_all iok in
+  let bus_ext i b = (* extends i to a bus as wide as b *)
+    Iarray.init (Iarray.length b) (fun j -> i+j)
+  and bus_ext' i s = (* extends i to a bus as wide as b *)
+    Iarray.init s (fun j -> i+j) in
+  let rok st rid asize wsize =
+    let x, _ = Env.find_first (fun x -> Env.find x st = rid) st in
+    Env.find x p.asizes = asize && Env.find x p.wsizes = wsize in
+  let ramok = rok p.ram_alloc and romok = rok p.rom_alloc in
+  let isok = function
+  | IRReset idx | IRSet idx  -> iok idx
+  | IRId (idx1, idx2) | IRNot (idx1, idx2)  | IRReg (idx1, idx2) -> iok idx1 && iok idx2
+  | IRRegV (idx1, bus2) -> bok (bus_ext idx1 bus2) && bok bus2
+  | IRAnd (idx1, idx2, idx3) | IROr (idx1, idx2, idx3) | IRNand (idx1, idx2, idx3)
+  | IRXor (idx1, idx2, idx3) | IRAndNot (idx1, idx2, idx3) | IROrNot (idx1, idx2, idx3)  -> iok idx1 && iok idx2 && iok idx3
+  | IRMux (idx1, idx2, idx3, idx4) -> iok idx1 && iok idx2 && iok idx3 && iok idx4
+  | IRRom (idx, rid, asize, wsize, raddr) -> bok (bus_ext' idx wsize) && romok rid asize wsize && bok raddr && Iarray.length raddr = asize
+  | IRRam (idx, rid, asize, wsize, raddr, we, waddr, wd) ->
+    bok (bus_ext' idx wsize) && ramok rid asize wsize &&
+    bok raddr && Iarray.length raddr = asize &&
+    iok we &&
+    bok waddr && Iarray.length raddr = asize &&
+    bok wd && Iarray.length wd = wsize
+  in
+  Env.for_all (Fun.const iok) p.var_alloc &&
+  Env.for_all (Fun.const bok) p.bus_alloc &&
+  Env.for_all (fun x rid ->
+    let rom = Iarray.get p.roms rid
+    and asize = Env.find x p.asizes
+    and wsize = Env.find x p.wsizes in
+    Bitarray.length rom >= wsize * (1 lsl asize)) p.rom_alloc &&
+  Iarray.for_all isok p.instructions
+
+let check_ir_safety p =
+  if is_ir_program_safe p then
+    VIRProg p
+  else
+    raise IRUnsafe
+end
+
+include IRVerfication
