@@ -307,7 +307,7 @@ type ir_state = {
   prog: ir_prog;
 }
 
-let create_state p =
+let create_ir_state (VIRProg p) =
   let rams = Array.make (Netlist_ast.Env.cardinal p.ram_alloc) (Persistent_array.Val Bitarray.epsilon) in
   Netlist_ast.Env.to_seq p.ram_alloc
   |> Seq.iter (fun (x, rid) -> rams.(rid) <- Persistent_array.make (Netlist_ast.Env.find x p.asizes) (Bitarray.zeroes (Netlist_ast.Env.find x p.wsizes)));
@@ -317,13 +317,13 @@ let create_state p =
     prog = p;
   }
 
-let copy_state s = {
+let copy_ir_state s = {
   vars = Bitarray.copy s.vars;
   rams = Array.copy s.rams;
   prog = s.prog;
 }
 
-let update_state s env =
+let update_ir_state s env =
   let open Netlist_ast in
   Env.iter (fun x v ->
     let idx = Env.find x s.prog.var_alloc in

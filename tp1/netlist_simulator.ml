@@ -30,6 +30,34 @@ let simulate_ir_step (VIRProg p) (renv: ir_state) (cenv: ir_state): unit =
   ) in
   Iarray.iter exec_instr p.instructions
 
+let persistent_simulator p inputs =
+  Seq.scan (fun renv input ->
+    let cenv = copy_ir_state renv in
+    update_ir_state cenv input;
+    simulate_ir_step p renv cenv;
+    cenv) (create_ir_state p) inputs
+
+module NonPersistent: sig
+  val non_persistent_simulator: verified_ir_prog -> (Netlist_ast.value Netlist_ast.Env.t -> ir_state) end = struct
+
+type non_persistent = {
+  mutable cenv: ir_state;
+  mutable renv: ir_state;
+}
+
+let non_persistent_simulator p =
+  let renv = create_ir_state p in
+  let cenv = copy_ir_state renv in
+  let internal = {renv; cenv;} in
+  fun input ->
+    let {renv; cenv;} = internal in
+    let cenv, renv = renv, cenv in (* swap the use of the two, renv now no longer being useful *)
+    update_ir_state cenv input;
+    simulate_ir_step p renv cenv;
+    internal.renv <- renv; internal.cenv <- cenv;
+    cenv
+end
+include NonPersistent
 
 let simulator program number_steps =
   let ir = Netlist_ir.compile ~rom_init:(fun _ -> Bitarray.epsilon) program in
