@@ -330,3 +330,13 @@ let update_ir_state s env =
     match v with
     | VBit b -> Bitarray.set s.vars idx (Bitarray.bit_of_bool b)
     | VBitArray ba -> Bitarray.blit (Bitarray.from_bool_array ba) 0 s.vars idx (Array.length ba)) env
+
+let extract_ir_state (VIRProg p) s vars =
+  let open Netlist_ast in
+  Env.map (fun x ty ->
+    match ty with
+    | TBit -> VBit (Bitarray.bool_of_bit (Bitarray.get s.vars (Env.find x p.var_alloc)))
+    | TBitArray n ->
+      let bus = Env.find x p.bus_alloc in
+      VBitArray (Array.init n (fun i -> Bitarray.bool_of_bit (Bitarray.get s.vars (Iarray.get bus i))))
+    ) vars
