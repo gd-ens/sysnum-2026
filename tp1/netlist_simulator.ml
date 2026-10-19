@@ -127,7 +127,8 @@ let simulator program number_steps =
       Seq.take number_steps states
     else
       states in
-  Seq.iter (print_outputs ~lsb_first:!lsb_first vir) states
+  Printf.printf "----Step 0----\n";
+  Seq.iteri (fun i state -> print_outputs ~lsb_first:!lsb_first vir state; Printf.printf "--------\n----Step %d----\n" (i+1);) states
 
 let compile filename =
   try
