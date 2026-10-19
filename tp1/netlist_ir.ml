@@ -333,7 +333,7 @@ let update_ir_state s env =
 
 let extract_ir_state (VIRProg p) s vars =
   let open Netlist_ast in
-  Env.map (fun x ty ->
+  Env.mapi (fun x ty ->
     match ty with
     | TBit -> VBit (Bitarray.bool_of_bit (Bitarray.get s.vars (Env.find x p.var_alloc)))
     | TBitArray n ->

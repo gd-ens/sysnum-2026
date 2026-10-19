@@ -2,6 +2,7 @@ open Netlist_ir
 let print_only = ref false
 let number_steps = ref (-1)
 let verbose = ref false
+let persistent = ref false
 
 let simulate_ir_step (VIRProg p) (renv: ir_state) (cenv: ir_state): unit =
   let exec_instr = Bitarray.(function
@@ -59,6 +60,52 @@ let non_persistent_simulator p =
 end
 include NonPersistent
 
+let get_inputs (VIRProg p) =
+  let open Netlist_ast in
+  let get_input x =
+    let t = Env.find x p.base.p_vars in
+    let prompt, length = match t with
+    | TBit -> x ^ " = ", 1
+    | TBitArray n -> x ^ ": " ^ string_of_int n ^ " = ", n in
+    let rec loop () =
+      print_string prompt;
+      let l = String.trim (read_line ()) in
+      if String.length l <> length then begin
+        Printf.eprintf "Incorrect lenght";
+        loop ()
+      end
+      else begin
+        try
+          let bool_of_char = function
+          | '0' -> false | '1' -> true | _ -> invalid_arg "bool_of_char" in
+          match t with
+          | TBit -> VBit (bool_of_char l.[0])
+          | TBitArray _ -> VBitArray (Array.init length (fun i -> bool_of_char l.[i]))
+        with Invalid_argument _ ->
+          Printf.eprintf "Invalid format";
+          loop ()
+      end in
+    loop () in
+  List.fold_left (fun env x -> Env.add x (get_input x) env) Env.empty p.base.p_inputs
+
+let get_outputs (VIRProg p as vp) s =
+  let open Netlist_ast in
+  let output_env = List.fold_left (fun env x -> Env.add x (Env.find x p.base.p_vars) env) Env.empty p.base.p_inputs in
+  extract_ir_state vp s output_env
+
+let print_outputs ?(lsb_first = true) p s =
+  Netlist_ast.Env.iter (fun x v ->
+    Printf.printf "%s = %s" x (
+      let char_of_bool b = if b then '1' else '0' in
+      match v with
+      | Netlist_ast.VBit b -> String.make 1 (char_of_bool b)
+      | Netlist_ast.VBitArray ba ->
+        Array.to_seq ba
+        |> Seq.map char_of_bool
+        |> (if lsb_first then Fun.id else (fun seq -> List.to_seq @@ List.rev @@ List.of_seq seq))
+        |> String.of_seq
+  )) (get_outputs p s)
+
 let simulator program number_steps =
   let ir = Netlist_ir.compile ~rom_init:(fun _ -> Bitarray.epsilon) program in
   if !verbose then Netlist_ir.print_ir_program ir;
@@ -84,7 +131,8 @@ let compile filename =
 let main () =
   Arg.parse
     ["-n", Arg.Set_int number_steps, "Number of steps to simulate";
-    "-v", Arg.Set verbose, "Verbose"]
+    "-v", Arg.Set verbose, "Verbose";
+    "-p", Arg.Set persistent, "Persistence required during evaluation"]
     compile
     ""
 ;;
