@@ -107,7 +107,7 @@ let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) 
   let roms = Array.make (Env.cardinal rom_alloc) Bitarray.epsilon in
   Env.iter (fun x rid ->
     roms.(rid) <- rom_init x;
-    if Array.length roms.(rid) < 1 lsl (Env.find x asizes * Env.find x wsizes)
+    if Bitarray.length roms.(rid) < 1 lsl (Env.find x asizes * Env.find x wsizes)
       then failwith "ROM not big enough")
   rom_alloc;
   let roms = Iarray.of_array roms in
