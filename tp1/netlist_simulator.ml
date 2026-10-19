@@ -3,6 +3,7 @@ let print_only = ref false
 let number_steps = ref (-1)
 let verbose = ref false
 let persistent = ref false
+let lsb_first = ref false
 
 let simulate_ir_step (VIRProg p) (renv: ir_state) (cenv: ir_state): unit =
   let exec_instr = Bitarray.(function
@@ -60,7 +61,7 @@ let non_persistent_simulator p =
 end
 include NonPersistent
 
-let get_inputs (VIRProg p) =
+let get_inputs ?(lsb_first = false) (VIRProg p) =
   let open Netlist_ast in
   let get_input x =
     let t = Env.find x p.base.p_vars in
@@ -71,7 +72,8 @@ let get_inputs (VIRProg p) =
       print_string prompt;
       let l = String.trim (read_line ()) in
       if String.length l <> length then begin
-        Printf.eprintf "Incorrect lenght";
+        Printf.eprintf "Incorrect length\n";
+        flush stderr;
         loop ()
       end
       else begin
@@ -80,9 +82,10 @@ let get_inputs (VIRProg p) =
           | '0' -> false | '1' -> true | _ -> invalid_arg "bool_of_char" in
           match t with
           | TBit -> VBit (bool_of_char l.[0])
-          | TBitArray _ -> VBitArray (Array.init length (fun i -> bool_of_char l.[i]))
+          | TBitArray _ -> VBitArray (Array.init length (fun i -> bool_of_char l.[if lsb_first then i else length - 1 - i]))
         with Invalid_argument _ ->
-          Printf.eprintf "Invalid format";
+          Printf.eprintf "Invalid format\n";
+          flush stderr;
           loop ()
       end in
     loop () in
@@ -90,12 +93,12 @@ let get_inputs (VIRProg p) =
 
 let get_outputs (VIRProg p as vp) s =
   let open Netlist_ast in
-  let output_env = List.fold_left (fun env x -> Env.add x (Env.find x p.base.p_vars) env) Env.empty p.base.p_inputs in
+  let output_env = List.fold_left (fun env x -> Env.add x (Env.find x p.base.p_vars) env) Env.empty p.base.p_outputs in
   extract_ir_state vp s output_env
 
-let print_outputs ?(lsb_first = true) p s =
+let print_outputs ?(lsb_first = false) p s =
   Netlist_ast.Env.iter (fun x v ->
-    Printf.printf "%s = %s" x (
+    Printf.printf "%s = %s\n" x (
       let char_of_bool b = if b then '1' else '0' in
       match v with
       | Netlist_ast.VBit b -> String.make 1 (char_of_bool b)
@@ -107,13 +110,24 @@ let print_outputs ?(lsb_first = true) p s =
   )) (get_outputs p s)
 
 let simulator program number_steps =
-  let ir = Netlist_ir.compile ~rom_init:(fun _ -> Bitarray.epsilon) program in
+  let ir = Netlist_ir.compile ~rom_init:(fun _ -> failwith "Unimplemented ROM initialization" (* TODO: change *)) program in
   if !verbose then Netlist_ir.print_ir_program ir;
   let vir = Netlist_ir.check_ir_safety ir in
   if !verbose then Printf.eprintf "Safty checks passed\n";
   flush stderr;
-  Printf.eprintf "Not implemented\n"; ignore vir;
-  ()
+  let inputs = Seq.of_dispenser (fun _ -> try Some (get_inputs ~lsb_first:!lsb_first vir) with End_of_file -> print_newline (); None) in
+  let states =
+    if !persistent then
+      persistent_simulator vir inputs
+    else
+      let nps = non_persistent_simulator vir in
+      Seq.map nps inputs in
+  let states =
+    if number_steps >= 0 then
+      Seq.take number_steps states
+    else
+      states in
+  Seq.iter (print_outputs ~lsb_first:!lsb_first vir) states
 
 let compile filename =
   try
@@ -132,7 +146,8 @@ let main () =
   Arg.parse
     ["-n", Arg.Set_int number_steps, "Number of steps to simulate";
     "-v", Arg.Set verbose, "Verbose";
-    "-p", Arg.Set persistent, "Persistence required during evaluation"]
+    "-p", Arg.Set persistent, "Persistence required during evaluation";
+    "--lsb", Arg.Set lsb_first, "Inputs and outputs lsb first"]
     compile
     ""
 ;;
