@@ -10,3 +10,15 @@ let set: (bitarray -> int -> bit -> unit) = Bytes.set
 let blit: (bitarray -> int -> bitarray -> int -> int -> unit) = Bytes.blit
 let epsilon: bitarray = Bytes.init 0 (fun _ -> '\000')
 let length: (bitarray -> int) = Bytes.length
+
+let uop op a = bit_of_bool (op (bool_of_bit a))
+let bop op a b = bit_of_bool (op (bool_of_bit a) (bool_of_bit b))
+let top op a b c = bit_of_bool (op (bool_of_bit a) (bool_of_bit b) (bool_of_bit c))
+let bnot = uop Stdlib.not
+let band = bop Stdlib.(&&)
+let bor = bop Stdlib.(||)
+let bnand = bop (fun x y -> not (x && y))
+let bxor = bop (<>)
+let bornot = bop (fun x y -> x || not y)
+let bandnot = bop (fun x y -> x && not y)
+let bmux = top (fun c x y -> if c then y else x)
