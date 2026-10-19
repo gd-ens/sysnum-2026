@@ -4,7 +4,7 @@ let read_archive (ic: In_channel.t) =
     failwith "No magic number";
   let rec aux () =
     try
-      let name = Option.get (In_channel.really_input_string ic 16) in
+      let name = String.trim (Option.get (In_channel.really_input_string ic 16)) in
       let _ = In_channel.really_input_string ic 32 in
       let length = int_of_string @@ String.trim @@ Option.get (In_channel.really_input_string ic 10) in
       let em = In_channel.really_input_string ic 2 in

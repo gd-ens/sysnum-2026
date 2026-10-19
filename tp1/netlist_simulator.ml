@@ -1,6 +1,7 @@
 let print_only = ref false
 let number_steps = ref (-1)
 let verbose = ref false
+let rom_file = ref ""
 
 (*let seq_simulator program inputs ?(mem_init = (fun _ size -> Array.make size false)) =
   let open Netlist_ast in
@@ -96,7 +97,16 @@ let verbose = ref false
     step env) init_env inputs*)
 
 let simulator program number_steps =
-  let ir = Netlist_ir.compile ~rom_init:(fun _ -> Bitarray.epsilon) program in
+  let load_rom =
+    let build_rom _ = failwith "" in
+    if !rom_file = "" then
+      fun _ -> failwith "No ROM file specified"
+    else
+      let ic = open_in !rom_file in
+      let romll = Ar.read_archive ic in
+      close_in ic;
+      fun name -> build_rom (List.assoc (name^"/") romll) in
+  let ir = Netlist_ir.compile ~rom_init:load_rom program in
   if !verbose then Netlist_ir.print_ir_program ir;
   flush stderr;
   failwith "netlist_simulator.simulator: Non implementé"
@@ -117,7 +127,8 @@ let compile filename =
 let main () =
   Arg.parse
     ["-n", Arg.Set_int number_steps, "Number of steps to simulate";
-    "-v", Arg.Set verbose, "Verbose"]
+    "-v", Arg.Set verbose, "Verbose";
+    "-r", Arg.Set_string rom_file, "AR file to load roms from"]
     compile
     ""
 ;;
