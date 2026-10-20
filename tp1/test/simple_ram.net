@@ -1,0 +1,5 @@
+INPUT raddr, we, waddr, wd
+OUTPUT o
+VAR raddr:4, we, waddr:4, wd:8, o:8
+IN
+o = RAM 4 8 raddr we waddr wd

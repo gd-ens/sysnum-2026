@@ -57,6 +57,7 @@ let non_persistent_simulator p =
   fun input ->
     let {renv; cenv;} = internal in
     let cenv, renv = renv, cenv in (* swap the use of the two, renv now no longer being useful *)
+    Array.blit renv.rams 0 cenv.rams 0 (Array.length renv.rams); (* necessary, otherwise we do not get the up to date content; does not matter on other registers *)
     update_ir_state cenv input;
     simulate_ir_step p renv cenv;
     internal.renv <- renv; internal.cenv <- cenv;
