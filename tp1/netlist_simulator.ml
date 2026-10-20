@@ -5,8 +5,11 @@ let verbose = ref false
 let persistent = ref false
 let lsb_first = ref false
 let rom_file = ref ""
+let no_prompt = ref false
 
 let simulate_ir_step (VIRProg p) (renv: ir_state) (cenv: ir_state): unit =
+  let get_bus bus = Bitarray.(Iarray.map (Fun.compose bool_of_bit (get cenv.vars)) bus)
+  and bits_to_int ba = Iarray.fold_right (fun b acc -> 2*acc + if b then 1 else 0) ba 0 in
   let exec_instr = Bitarray.(function
   | IRReset idx -> set cenv.vars idx bfalse
   | IRSet idx -> set cenv.vars idx btrue
@@ -21,9 +24,8 @@ let simulate_ir_step (VIRProg p) (renv: ir_state) (cenv: ir_state): unit =
   | IRAndNot (idx1, idx2, idx3) -> set cenv.vars idx1 (bandnot (get cenv.vars idx2) (get cenv.vars idx3))
   | IROrNot (idx1, idx2, idx3) -> set cenv.vars idx1 (bornot (get cenv.vars idx2) (get cenv.vars idx3))
   | IRMux (idx1, idx2, idx3, idx4) -> set cenv.vars idx1 (bmux (get cenv.vars idx2) (get cenv.vars idx3) (get cenv.vars idx4))
-  | IRRom (idx, rid, asize, wsize, raddr) -> blit (Iarray.get p.roms rid) (0 (* TODO: fix *) * wsize) cenv.vars idx wsize
+  | IRRom (idx, rid, asize, wsize, raddr) -> blit (Iarray.get p.roms rid) (bits_to_int (get_bus raddr) * wsize) cenv.vars idx wsize
   | IRRam (idx, rid, asize, wsize, raddr, we, waddr, wd) ->
-    let get_bus bus = Iarray.map (Fun.compose bool_of_bit (get cenv.vars)) bus in
     let raddr = get_bus raddr (* get the bits associated with the bus *) in
     blit (Persistent_array.get cenv.rams.(rid) (Iarray.to_seq raddr)) 0 cenv.vars idx wsize;
     if bool_of_bit (get cenv.vars we) then
@@ -69,6 +71,7 @@ let get_inputs ?(lsb_first = false) (VIRProg p) =
     let prompt, length = match t with
     | TBit -> x ^ " = ", 1
     | TBitArray n -> x ^ ": " ^ string_of_int n ^ " = ", n in
+    let prompt = if !no_prompt then "" else prompt in
     let rec loop () =
       print_string prompt;
       let l = String.trim (read_line ()) in
@@ -99,7 +102,7 @@ let get_outputs (VIRProg p as vp) s =
 
 let print_outputs ?(lsb_first = false) p s =
   Netlist_ast.Env.iter (fun x v ->
-    Printf.printf "%s = %s\n" x (
+    Printf.printf (if !no_prompt then "%s%s\n" else "%s = %s\n") (if !no_prompt then "" else x) (
       let char_of_bool b = if b then '1' else '0' in
       match v with
       | Netlist_ast.VBit b -> String.make 1 (char_of_bool b)
@@ -149,8 +152,8 @@ let simulator program number_steps =
       Seq.take number_steps states
     else
       states in
-  Printf.printf "----Step 0----\n";
-  Seq.iteri (fun i state -> print_outputs ~lsb_first:!lsb_first vir state; Printf.printf "--------\n----Step %d----\n" (i+1);) states
+  if not !no_prompt then Printf.printf "----Step 0----\n";
+  Seq.iteri (fun i state -> print_outputs ~lsb_first:!lsb_first vir state; if not !no_prompt then Printf.printf "--------\n----Step %d----\n" (i+1);) states
 
 let compile filename =
   try
@@ -171,7 +174,8 @@ let main () =
     "-v", Arg.Set verbose, "Verbose";
     "-p", Arg.Set persistent, "Persistence required during evaluation";
     "--lsb", Arg.Set lsb_first, "Inputs and outputs lsb first";
-    "--rom", Arg.Set_string rom_file, "AR file to load roms from"]
+    "--rom", Arg.Set_string rom_file, "AR file to load roms from";
+    "--no-prompt", Arg.Set no_prompt, "Remove prompts (for integration)"]
     compile
     ""
 ;;
