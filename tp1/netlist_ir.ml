@@ -37,7 +37,8 @@ type ir_instr =
 | IRMux of idx*idx*idx*idx (* var[idx1] <- if var[idx2] then var[idx4] else var[idx3] *)
 (* Memory operation *)
 | IRRom of idx*rid*int*int*bus (* rom, order specified in netlist; idx is the start of the destination bus that MUST be contiguously allocated *)
-| IRRam of idx*rid*int*int*bus*idx*bus*bus (* ram, same *)
+| IRRamRead of idx*rid*int*int*bus (* ram read, same *)
+| IRRamWrite of rid*int*int*idx*bus*bus (* ram write : ram[rid] <- we, waddr, wd *)
 
 type ir_prog = {
   var_size: int;
@@ -56,7 +57,7 @@ let type_size = function
 | Netlist_ast.TBit -> 1
 | Netlist_ast.TBitArray n -> n
 
-let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) : ir_prog =
+let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) : ir_prog = (* TODO: change *)
   let open Netlist_ast in
   let get_id = function
   | Avar v -> v
@@ -111,25 +112,26 @@ let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) 
   and find_bus x = Env.find (get_id x) bus_alloc in
   let rec compile_instruction x =
     let dst = find_idx x in function
-  | Earg (Aconst (VBit true)) -> [IRSet dst]
-  | Earg (Aconst (VBit false)) -> [IRReset dst]
-  | Earg (Avar a as v) -> [IRId (dst, find_idx v)]
+  | Earg (Aconst (VBit true)) -> [IRSet dst], []
+  | Earg (Aconst (VBit false)) -> [IRReset dst], []
+  | Earg (Avar a as v) -> [IRId (dst, find_idx v)], []
   | Earg (Aconst (VBitArray _)) -> failwith "Earg not supporting bus operation"
   | Ereg r ->
     let v = Avar r in
     (match Env.find r p.p_vars with
-    | TBit -> [IRReg (dst, find_idx v)]
-    | TBitArray n -> [IRRegV (dst, find_bus v)])
+    | TBit -> [IRReg (dst, find_idx v)], []
+    | TBitArray n -> [IRRegV (dst, find_bus v)], [])
   | Enot (Aconst (VBit b)) -> compile_instruction x (Earg (Aconst (VBit (not b))))
-  | Enot (Avar a as v) -> [IRNot (dst, find_idx v)]
+  | Enot (Avar a as v) -> [IRNot (dst, find_idx v)], []
   | Enot _ -> failwith "Enot not suporting bus operation"
   | Ebinop (op, a, b) -> compile_binop x op a b
   | Emux (s, a, b) -> compile_mux x s a b
-  | Econcat _ | Eslice _ | Eselect _ -> [] (* nop, managed in allocation *)
+  | Econcat _ | Eslice _ | Eselect _ -> [], [] (* nop, managed in allocation *)
   | Eram (asize, wsize, raddr, we, waddr, wd) ->
-    [IRRam (dst, Env.find (get_id x) ram_alloc, asize, wsize, find_bus raddr, find_idx we, find_bus waddr, find_bus wd)]
+    let rid = Env.find (get_id x) ram_alloc in
+    [IRRamRead (dst, rid, asize, wsize, find_bus raddr)], [IRRamWrite (rid, asize, wsize, find_idx we, find_bus waddr, find_bus wd)]
   | Erom (asize, wsize, raddr) ->
-    [IRRom (dst, Env.find (get_id x) rom_alloc, asize, wsize, find_bus raddr)]
+    [IRRom (dst, Env.find (get_id x) rom_alloc, asize, wsize, find_bus raddr)], []
   and compile_binop x op a b = match (op, a, b) with
   | (op, Aconst (VBit a), Aconst (VBit b)) ->
     let r = match op with
@@ -143,26 +145,26 @@ let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) 
     compile_instruction x (Earg v)
   | (And, Aconst (VBit false), _) | (And, _, Aconst (VBit false)) ->
     compile_instruction x (Earg (Aconst (VBit false)))
-  | (And, a, b) -> [IRAnd (find_idx x, find_idx a, find_idx b)]
+  | (And, a, b) -> [IRAnd (find_idx x, find_idx a, find_idx b)], []
 
   | (Or, Aconst (VBit false), (Avar _ as v)) | (Or,  (Avar _ as v), Aconst (VBit false)) ->
     compile_instruction x (Earg v)
   | (Or, Aconst (VBit true), _) | (Or, _, Aconst (VBit true)) ->
     compile_instruction x (Earg (Aconst (VBit true)))
-  | (Or, a, b) -> [IROr (find_idx x, find_idx a, find_idx b)]
+  | (Or, a, b) -> [IROr (find_idx x, find_idx a, find_idx b)], []
 
   | (Nand, Aconst (VBit true), (Avar _ as v)) | (Nand,  (Avar _ as v), Aconst (VBit true)) ->
     compile_instruction x (Enot v)
   | (Nand, Aconst (VBit false), _) | (Nand, _, Aconst (VBit false)) ->
     compile_instruction x (Earg (Aconst (VBit true)))
-  | (Nand, a, b) -> [IRNand (find_idx x, find_idx a, find_idx b)]
+  | (Nand, a, b) -> [IRNand (find_idx x, find_idx a, find_idx b)], []
 
 
   | (Xor, Aconst (VBit false), (Avar _ as v)) | (Xor,  (Avar _ as v), Aconst (VBit false)) ->
     compile_instruction x (Earg v)
   | (Xor, Aconst (VBit true), (Avar _ as v)) | (Xor,  (Avar _ as v), Aconst (VBit true)) ->
     compile_instruction x (Enot v)
-  | (Xor, a, b) -> [IRXor (find_idx x, find_idx a, find_idx b)]
+  | (Xor, a, b) -> [IRXor (find_idx x, find_idx a, find_idx b)], []
   and compile_mux x s a b = match s with
   | Aconst (VBit false) -> compile_instruction x (Earg a)
   | Aconst (VBit true) -> compile_instruction x (Earg b)
@@ -176,22 +178,24 @@ let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) 
       else
         compile_instruction x (Enot s)
     | (Aconst (VBit false), b) ->
-      [IRAnd (find_idx x, find_idx b, find_idx s)]
+      [IRAnd (find_idx x, find_idx b, find_idx s)], []
     | (b, Aconst (VBit true)) ->
-      [IROr (find_idx x, find_idx b, find_idx s)]
+      [IROr (find_idx x, find_idx b, find_idx s)], []
     | (Aconst (VBit true), b) ->
-      [IROrNot (find_idx x, find_idx b, find_idx s)]
+      [IROrNot (find_idx x, find_idx b, find_idx s)], []
     | (b, Aconst (VBit false)) ->
-      [IRAndNot (find_idx x, find_idx b, find_idx s)]
+      [IRAndNot (find_idx x, find_idx b, find_idx s)], []
     | (Aconst (VBitArray _), _) | (_, Aconst (VBitArray _)) -> failwith "Vectorized mux not supported"
     | (Avar _ as a, (Avar _ as b)) ->
-      [IRMux (find_idx x, find_idx s, find_idx a, find_idx b)]
+      [IRMux (find_idx x, find_idx s, find_idx a, find_idx b)], []
   in
   let instructions =
     p.p_eqs
     |> List.map (fun (x, eq) -> compile_instruction (Avar x) eq)
-    |> List.flatten
-    |> Iarray.of_list in
+    |> List.split (* first gets concatenated to second for delayed instructions -- RAM *)
+    |> Pair.map List.flatten List.flatten
+    |> Pair.map Iarray.of_list Iarray.of_list
+    |> (fun (main, delayed) -> Iarray.append main delayed) in
   {
     var_size;
     var_alloc;
@@ -223,7 +227,8 @@ let print_ir_program ?(oc = Out_channel.stderr) p =
   | IROrNot (idx1, idx2, idx3) -> Printf.sprintf "v(%d) <- v(%d) | ~v(%d)" idx1 idx2 idx3
   | IRMux (idx1, idx2, idx3, idx4) -> Printf.sprintf "v(%d) <- Mux(v(%d), v(%d), v(%d))" idx1 idx2 idx3 idx4
   | IRRom (idx, rid, asize, wsize, bus) -> Printf.sprintf "v(%d..) <- ROM(%d, asize = %d, wsize = %d)(%s)" idx rid asize wsize (string_of_bus bus)
-  | IRRam (idx, rid, asize, wsize, raddr, we, waddr, wd) -> Printf.sprintf "v(%d..) <- RAM(%d, asize = %d, wsize = %d)(raddr = %s, we = v(%d), waddr = %s, wd = %s)" idx rid asize wsize (string_of_bus raddr) we (string_of_bus waddr) (string_of_bus wd)
+  | IRRamRead (idx, rid, asize, wsize, raddr) -> Printf.sprintf "v(%d..) <- RAM(%d, asize = %d, wsize = %d)(raddr = %s)" idx rid asize wsize (string_of_bus raddr)
+  | IRRamWrite (rid, asize, wsize, we, waddr, wd) -> Printf.sprintf "RAM(%d, asize = %d, wsize = %d) we = v(%d) <- waddr = %s, wd = %s" rid asize wsize we (string_of_bus waddr) (string_of_bus wd)
   in
   let open Netlist_ast in
   Printf.fprintf oc "----Program IR----\n";
@@ -276,11 +281,14 @@ let is_ir_program_safe p =
   | IRXor (idx1, idx2, idx3) | IRAndNot (idx1, idx2, idx3) | IROrNot (idx1, idx2, idx3)  -> iok idx1 && iok idx2 && iok idx3
   | IRMux (idx1, idx2, idx3, idx4) -> iok idx1 && iok idx2 && iok idx3 && iok idx4
   | IRRom (idx, rid, asize, wsize, raddr) -> bok (bus_ext' idx wsize) && romok rid asize wsize && bok raddr && Iarray.length raddr = asize
-  | IRRam (idx, rid, asize, wsize, raddr, we, waddr, wd) ->
+  | IRRamRead (idx, rid, asize, wsize, raddr) ->
     bok (bus_ext' idx wsize) && ramok rid asize wsize &&
     bok raddr && Iarray.length raddr = asize &&
+    Iarray.length raddr = asize
+  | IRRamWrite (rid, asize, wsize, we, waddr, wd) ->
+    ramok rid asize wsize &&
     iok we &&
-    bok waddr && Iarray.length raddr = asize &&
+    bok waddr &&
     bok wd && Iarray.length wd = wsize
   in
   Env.for_all (Fun.const iok) p.var_alloc &&
