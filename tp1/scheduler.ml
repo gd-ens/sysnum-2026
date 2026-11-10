@@ -13,7 +13,7 @@ let read_exp ((_, rhs): equation) =
     | Earg a | Enot a | Erom (_, _, a) | Eslice (_, _, a) | Eselect (_, a) -> [a]
     | Ebinop (_, a1, a2) | Econcat (a1, a2) -> [a1; a2]
     | Emux (a1, a2, a3) -> [a1; a2; a3]
-    | Eram (_, _, a1, a2, a3, a4) -> [a1; a2; a3; a4])
+    | Eram (_, _, ra, we, wa, wd) -> [ra]) (* dependency only for read; write is dealt with at the end, and should have its input already set -- hopefully *)
 
 let schedule p =
   let g_deps = mk_graph () in
