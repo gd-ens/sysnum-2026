@@ -25,9 +25,10 @@ let simulate_ir_step (VIRProg p) (renv: ir_state) (cenv: ir_state): unit =
   | IROrNot (idx1, idx2, idx3) -> set cenv.vars idx1 (bornot (get cenv.vars idx2) (get cenv.vars idx3))
   | IRMux (idx1, idx2, idx3, idx4) -> set cenv.vars idx1 (bmux (get cenv.vars idx2) (get cenv.vars idx3) (get cenv.vars idx4))
   | IRRom (idx, rid, asize, wsize, raddr) -> blit (Iarray.get p.roms rid) (bits_to_int (get_bus raddr) * wsize) cenv.vars idx wsize
-  | IRRam (idx, rid, asize, wsize, raddr, we, waddr, wd) ->
+  | IRRamRead (idx, rid, asize, wsize, raddr) ->
     let raddr = get_bus raddr (* get the bits associated with the bus *) in
-    blit (Persistent_array.get cenv.rams.(rid) (Iarray.to_seq raddr)) 0 cenv.vars idx wsize;
+    blit (Persistent_array.get cenv.rams.(rid) (Iarray.to_seq raddr)) 0 cenv.vars idx wsize
+  | IRRamWrite (rid, asize, wsize, we, waddr, wd) ->
     if bool_of_bit (get cenv.vars we) then
       let waddr = get_bus waddr
       and wd = from_bool_array (Iarray.to_array (get_bus wd)) in
