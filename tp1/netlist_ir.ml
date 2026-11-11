@@ -36,9 +36,9 @@ type ir_instr =
 (* Ternary instruction(s) *)
 | IRMux of idx*idx*idx*idx (* var[idx1] <- if var[idx2] then var[idx4] else var[idx3] *)
 (* Memory operation *)
-| IRRom of idx*rid*int*int*bus (* rom, order specified in netlist; idx is the start of the destination bus that MUST be contiguously allocated *)
+| IRRom of idx*rid*int*int*bus (* rom: IRRom(idx, rid, asize, wsize, raddr) read into bus starting at idx (must be contiguous) from ROM rid, asize, wsize with address raddr *)
 | IRRamRead of idx*rid*int*int*bus (* ram read, same *)
-| IRRamWrite of rid*int*int*idx*bus*bus (* ram write : ram[rid] <- we, waddr, wd *)
+| IRRamWrite of rid*int*int*idx*bus*bus (* ram write : ram[rid], asize, wize <- we, waddr, wd, appearing in that order *)
 
 type ir_prog = {
   var_size: int;
