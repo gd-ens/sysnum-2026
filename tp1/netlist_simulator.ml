@@ -43,12 +43,12 @@ let persistent_simulator p inputs =
     simulate_ir_step p renv cenv;
     cenv) (create_ir_state p) inputs
 
-module NonPersistent: sig
+module NonPersistent: sig (* hack to avoid exporting its internal state *)
   val non_persistent_simulator: verified_ir_prog -> (Netlist_ast.value Netlist_ast.Env.t -> ir_state) end = struct
 
 type non_persistent = {
-  mutable cenv: ir_state;
-  mutable renv: ir_state;
+  mutable cenv: ir_state; (* currently used environment, aka. var and such *)
+  mutable renv: ir_state; (* previously used environment, aka. reg and such *)
 }
 
 let non_persistent_simulator p =
@@ -117,7 +117,7 @@ let print_outputs ?(lsb_first = false) p s =
 
 let simulator program number_steps =
   let load_rom =
-    let build_rom s =
+    let build_rom s = (* builds the bitstring from packed string *)
       s 
       |> String.to_seq
       |> Seq.map (fun c -> let i = int_of_char c in Array.map (fun shift -> i lsr shift mod 2 = 1) [|0;1;2;3;4;5;6;7|])

@@ -8,7 +8,7 @@
 open Bitarray
 open Persistent_array
 
-(* General definitions *)
+(* General definitions (aliases for clarity) *)
 
 type idx = int
 type rid = int (* RAM / ROM id *)
@@ -44,13 +44,13 @@ type ir_prog = {
   var_size: int;
   var_alloc: idx Netlist_ast.Env.t; (* allocation in the big memory *)
   bus_alloc: bus Netlist_ast.Env.t; (* where the bus leads to *)
-  ram_alloc: rid Netlist_ast.Env.t;
-  rom_alloc: rid Netlist_ast.Env.t;
-  asizes: int Netlist_ast.Env.t;
-  wsizes: int Netlist_ast.Env.t;
+  ram_alloc: rid Netlist_ast.Env.t; (* name -> rid for RAM *)
+  rom_alloc: rid Netlist_ast.Env.t; (* name -> rid for ROM *)
+  asizes: int Netlist_ast.Env.t; (* asize for RAM or ROM *)
+  wsizes: int Netlist_ast.Env.t; (* wsize for RAM or ROM *)
   roms: bitarray iarray;
   instructions: ir_instr iarray;
-  base: Netlist_ast.program;
+  base: Netlist_ast.program; (* program it is compiled from *)
 }
 
 let type_size = function
@@ -73,10 +73,6 @@ let compile (p: Netlist_ast.program) ~(rom_init: Netlist_ast.ident -> bitarray) 
       match xtyp with
       | TBit -> (let new_curr, idx = match eq with (* logic to avoid duplication with select if part of a bus *)
         | Eselect(i, a) -> let y = get_id a in curr_idx, (Env.find y bus_alloc).%(i)
-          (*(match a with
-          | Aconst _ -> curr_idx + 1, curr_idx(* need to allocate anyway *)
-          | Avar y -> curr_idx, (Env.find y bus_alloc).(i)(* aliasing *)
-        )*)
         | _ -> curr_idx + 1, curr_idx in
         (new_curr, Env.add x idx var_alloc, Env.add x (Iarray.of_array [|idx|]) bus_alloc (* to be able to treat a single bit as a bus*), ram_alloc, rom_alloc, asizes, wsizes)
       )

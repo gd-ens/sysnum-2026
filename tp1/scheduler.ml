@@ -24,7 +24,7 @@ let schedule p =
     List.iter (fun input -> add_edge g_deps input output) inputs);
   try
     let order = topological g_deps in
-    let c_order = Hashtbl.create 97 in (* compiled order: ident -> int reprsenting order *)
+    let c_order = Hashtbl.create 97 in (* compiled linear topological order: ident -> int reprsenting order, to allow for fast sorting *)
     List.iteri (fun i v -> Hashtbl.add c_order v i) order;
     {p with
       p_eqs = List.sort (fun (v1, _) (v2, _) -> compare (Hashtbl.find c_order v1) (Hashtbl.find c_order v2)) p.p_eqs
