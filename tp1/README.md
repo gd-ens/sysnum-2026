@@ -1,5 +1,8 @@
 # Netlist simulator
-This is an implementation of the netlist simulator for the "Système Numériques" lecture, session 2026/2027
+This is an implementation by Gabriel Deleage of the netlist simulator for the "Systèmes Numériques" lecture, session 2026/2027.
+
+This is personal work and shall not be used without explicit permission of the author.
+Permission is granted to ENS's "Systèmes Numériques" teaching staff to use this for evaluation purposes.
 
 ## Building
 - `make` to build netlist_simulator.byte; then you can execute it
