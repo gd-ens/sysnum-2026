@@ -155,7 +155,11 @@ let simulator program number_steps =
     else
       states in
   if not !no_prompt then Printf.printf "----Step 0----\n";
-  Seq.iteri (fun i state -> print_outputs ~lsb_first:!lsb_first vir state; if not !no_prompt then Printf.printf "--------\n----Step %d----\n" (i+1);) states
+  Seq.iteri (fun i state ->
+    print_outputs ~lsb_first:!lsb_first vir state;
+    if !verbose then (Printf.eprintf "Internal state (LSB first): %s\n" (Bitarray.to_string state.vars); flush stderr);
+    if not !no_prompt then Printf.printf "--------\n----Step %d----\n" (i+1)
+  ) states
 
 let compile filename =
   try
