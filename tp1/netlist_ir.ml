@@ -327,7 +327,7 @@ let copy_ir_state s = {
   prog = s.prog;
 }
 
-let update_ir_state s env =
+let update_ir_state s env = (* update state s with inputs *)
   let open Netlist_ast in
   Env.iter (fun x v ->
     let idx = Env.find x s.prog.var_alloc in
@@ -335,7 +335,7 @@ let update_ir_state s env =
     | VBit b -> Bitarray.set s.vars idx (Bitarray.bit_of_bool b)
     | VBitArray ba -> Bitarray.blit (Bitarray.from_bool_array ba) 0 s.vars idx (Array.length ba)) env
 
-let extract_ir_state (VIRProg p) s vars =
+let extract_ir_state (VIRProg p) s vars = (* IRState -> Env, with a reference Env for types, used to extract outputs *)
   let open Netlist_ast in
   Env.mapi (fun x ty ->
     match ty with
