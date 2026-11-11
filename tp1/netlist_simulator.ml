@@ -176,7 +176,7 @@ let main () =
     "-v", Arg.Set verbose, "Verbose";
     "-p", Arg.Set persistent, "Persistence required during evaluation";
     "--lsb", Arg.Set lsb_first, "Inputs and outputs lsb first";
-    "--rom", Arg.Set_string rom_file, "AR file to load roms from";
+    "--rom", Arg.Set_string rom_file, "file to load roms from, in ar format (each rom must be named <rom_var_name>/)";
     "--no-prompt", Arg.Set no_prompt, "Remove prompts (for integration)"]
     compile
     ""
