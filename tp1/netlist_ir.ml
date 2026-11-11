@@ -232,7 +232,7 @@ let print_ir_program ?(oc = Out_channel.stderr) p =
   in
   let open Netlist_ast in
   Printf.fprintf oc "----Program IR----\n";
-  Printf.fprintf oc "Total size: %d\n" p.var_size;
+  Printf.fprintf oc "Total numbers of bits (excluding RAM/ROM): %d\n" p.var_size;
   Printf.fprintf oc "----Variables----\n";
   Env.iter (fun name idx -> Printf.fprintf oc "- %s: %d\n" name idx) p.var_alloc;
   Printf.fprintf oc "----Buses----\n";
