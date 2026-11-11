@@ -1,4 +1,5 @@
 netlist_simulator.byte:
+	dune build
 	ocamlbuild netlist_simulator.byte
 
 rom:
@@ -6,6 +7,4 @@ rom:
 
 clean:
 	dune clean
-
-distclean: clean
 	rm netlist_simulator.byte

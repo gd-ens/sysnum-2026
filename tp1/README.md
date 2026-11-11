@@ -6,8 +6,7 @@ Permission is granted to ENS's "Systèmes Numériques" teaching staff to use thi
 
 ## Building
 - `make` to build netlist_simulator.byte; then you can execute it
-- `make clean` to remove dune build files
-- `make distclean` to also remove the generated executable
+- `make clean` to remove dune build files and the generated executable
 - `make testrom` to build the test ROM in `rom_test` (see more on ROM in a dedicated section)
 
 ## Usage
