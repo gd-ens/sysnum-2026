@@ -228,7 +228,7 @@ let print_ir_program ?(oc = Out_channel.stderr) p =
   | IRMux (idx1, idx2, idx3, idx4) -> Printf.sprintf "v(%d) <- Mux(v(%d), v(%d), v(%d))" idx1 idx2 idx3 idx4
   | IRRom (idx, rid, asize, wsize, bus) -> Printf.sprintf "v(%d..) <- ROM(%d, asize = %d, wsize = %d)(%s)" idx rid asize wsize (string_of_bus bus)
   | IRRamRead (idx, rid, asize, wsize, raddr) -> Printf.sprintf "v(%d..) <- RAM(%d, asize = %d, wsize = %d)(raddr = %s)" idx rid asize wsize (string_of_bus raddr)
-  | IRRamWrite (rid, asize, wsize, we, waddr, wd) -> Printf.sprintf "RAM(%d, asize = %d, wsize = %d) we = v(%d) <- waddr = %s, wd = %s" rid asize wsize we (string_of_bus waddr) (string_of_bus wd)
+  | IRRamWrite (rid, asize, wsize, we, waddr, wd) -> Printf.sprintf "RAM(%d, asize = %d, wsize = %d)(waddr = %s) <(we = v(%d))- wd = %s" rid asize wsize (string_of_bus waddr) we (string_of_bus wd)
   in
   let open Netlist_ast in
   Printf.fprintf oc "----Program IR----\n";
