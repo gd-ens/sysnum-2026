@@ -131,9 +131,9 @@ let simulator program number_steps =
       let romll = Ar.read_archive ic in
       close_in ic;
       fun name ->
-        let s = List.assoc (name^"/") romll in
+        let s = try List.assoc (name^"/") romll with _ -> failwith (Printf.sprintf "ROM %s not found" name) in
         if !verbose then (
-          Printf.eprintf "Building ROM from string \"%s\"\n" (String.escaped s);
+          Printf.eprintf "Building ROM %s from string \"%s\"\n" name (String.escaped s);
           flush stderr
         );
         build_rom s in
@@ -173,6 +173,8 @@ let compile filename =
     end;
   with
     | Netlist.Parse_error s -> Format.eprintf "An error accurred: %s@." s; exit 2
+    | Failure msg -> Printf.eprintf "An error occured: %s\n" msg; exit 2
+    | IRUnsafe -> Printf.eprintf "Generated IR is unsafe; are your ROMs big enough ?"; exit 2
 
 let main () =
   Arg.parse
